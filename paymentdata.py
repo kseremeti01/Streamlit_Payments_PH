@@ -2,33 +2,30 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-# Hardcoded file path
-file_path = r"C:\Users\username\Documents\PaymentData.csv"
-
 # Load the dataset
-ph_data = pd.read_csv(file_path, encoding='latin1')  # Adjust for encoding issues
+data = pd.read_csv( r"./PaymentData.csv", encoding='latin1')  # Adjust for encoding issues
 
 # Ensure 'CreatedAt' column is in datetime format
-ph_data['CreatedAt'] = pd.to_datetime(ph_data['CreatedAt'], errors='coerce', dayfirst=True)
+data['CreatedAt'] = pd.to_datetime(data['CreatedAt'], errors='coerce', dayfirst=True)
 
 # Create Date and Hour columns for easier filtering (without splitting 'CreatedAt')
-ph_data['Date'] = pd.to_datetime(ph_data['CreatedAt'].dt.date)  # Ensure Date is in datetime format
-ph_data['Hour'] = ph_data['CreatedAt'].dt.hour
-ph_data['Time'] = ph_data['CreatedAt'].dt.time
+data['Date'] = pd.to_datetime(data['CreatedAt'].dt.date)  # Ensure Date is in datetime format
+data['Hour'] = data['CreatedAt'].dt.hour
+data['Time'] = data['CreatedAt'].dt.time
 
 # Sidebar Filters
 st.sidebar.header("Filters")
 
 # Brand Filter with 'All' option (changed to dropdown)
-brands = ph_data['Brand'].unique()
+brands = data['Brand'].unique()
 brands = ['All'] + list(brands)  # Add 'All' option for the brands filter
 selected_brand = st.sidebar.selectbox("Select Brand", brands, index=0)  # Default to 'All'
 
 # Apply brand filter to update other filters
 if selected_brand == 'All':
-    filtered_data = ph_data
+    filtered_data = data
 else:
-    filtered_data = ph_data[ph_data['Brand'] == selected_brand]
+    filtered_data = data[data['Brand'] == selected_brand]
 
 # Set the title dynamically based on selected brand
 st.title(f"Payment Data Q4 - {selected_brand if selected_brand != 'All' else 'All Brands'}")
