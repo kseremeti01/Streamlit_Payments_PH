@@ -3,7 +3,7 @@ import plotly.express as px
 import streamlit as st
 
 # Load the dataset
-data = pd.read_csv(r"./PaymentDataPH.csv", encoding='latin1')  # Adjust for encoding issues
+data = pd.read_csv(r"./PaymentDataPH.zip", compression='zip', encoding='latin1')
 
 # Ensure 'CreatedAt' column is in datetime format
 data['CreatedAt'] = pd.to_datetime(data['CreatedAt'], errors='coerce', dayfirst=True)
