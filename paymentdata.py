@@ -3,10 +3,18 @@ import plotly.express as px
 import streamlit as st
 
 # Load the dataset
-data = pd.read_csv( r"./PaymentData.csv", encoding='latin1')  # Adjust for encoding issues
+data = pd.read_csv(r"./PaymentDataPH.csv", encoding='latin1')  # Adjust for encoding issues
 
 # Ensure 'CreatedAt' column is in datetime format
 data['CreatedAt'] = pd.to_datetime(data['CreatedAt'], errors='coerce', dayfirst=True)
+
+# Add 'Mode', 'IsCollectionBusiness', and 'IsRecipientBusiness' columns if not already present
+if 'Mode' not in data.columns:
+    data['Mode'] = None  # Assign None or default values as appropriate
+if 'IsCollectionBusiness' not in data.columns:
+    data['IsCollectionBusiness'] = False  # Assign default values (e.g., False)
+if 'IsRecipientBusiness' not in data.columns:
+    data['IsRecipientBusiness'] = False  # Assign default values (e.g., False)
 
 # Create Date and Hour columns for easier filtering (without splitting 'CreatedAt')
 data['Date'] = pd.to_datetime(data['CreatedAt'].dt.date)  # Ensure Date is in datetime format
@@ -16,16 +24,31 @@ data['Time'] = data['CreatedAt'].dt.time
 # Sidebar Filters
 st.sidebar.header("Filters")
 
-# Brand Filter with 'All' option (changed to dropdown)
-brands = data['Brand'].unique()
-brands = ['All'] + list(brands)  # Add 'All' option for the brands filter
-selected_brand = st.sidebar.selectbox("Select Brand", brands, index=0)  # Default to 'All'
+# Hidden 'Brand' filter - Default to 'All'
+selected_brand = 'All'
 
 # Apply brand filter to update other filters
-if selected_brand == 'All':
-    filtered_data = data
-else:
-    filtered_data = data[data['Brand'] == selected_brand]
+filtered_data = data if selected_brand == 'All' else data[data['Brand'] == selected_brand]
+
+# Mode, IsCollectionBusiness, and IsRecipientBusiness filters
+modes = ['All'] + list(filtered_data['Mode'].dropna().unique())  # Add 'All' option for modes
+selected_modes = st.sidebar.multiselect("Select Modes", modes, default=modes)
+
+is_collection_business_options = ['All', True, False]
+selected_is_collection_business = st.sidebar.multiselect(
+    "Select IsCollectionBusiness", is_collection_business_options, default=is_collection_business_options)
+
+is_recipient_business_options = ['All', True, False]
+selected_is_recipient_business = st.sidebar.multiselect(
+    "Select IsRecipientBusiness", is_recipient_business_options, default=is_recipient_business_options)
+
+# Apply filters for Mode, IsCollectionBusiness, and IsRecipientBusiness
+if selected_modes != ['All']:
+    filtered_data = filtered_data[filtered_data['Mode'].isin(selected_modes)]
+if selected_is_collection_business != ['All']:
+    filtered_data = filtered_data[filtered_data['IsCollectionBusiness'].isin(selected_is_collection_business)]
+if selected_is_recipient_business != ['All']:
+    filtered_data = filtered_data[filtered_data['IsRecipientBusiness'].isin(selected_is_recipient_business)]
 
 # Set the title dynamically based on selected brand
 st.title(f"Payment Data Q4 - {selected_brand if selected_brand != 'All' else 'All Brands'}")
@@ -48,7 +71,7 @@ selected_carriers = st.sidebar.multiselect("Select Carriers", carriers, default=
 
 # Update Service Filter dynamically based on selected Carriers
 carrier_services_dict = {
-    carrier: filtered_data[filtered_data['Carrier'] == carrier]['CarrierService'].unique()
+    carrier: filtered_data[filtered_data['Carrier'] == carrier]['ServiceType'].unique()
     for carrier in selected_carriers if carrier != 'All'
 }
 selected_services = []
@@ -61,16 +84,16 @@ if selected_carriers != ['All']:  # Only show services if specific carriers are 
 
 # Apply final filter to the data
 if selected_brand == 'All':
-    filtered_data = filtered_data[
-        (filtered_data['CarrierService'].isin(selected_services)) &
+    filtered_data = filtered_data[(
+        filtered_data['ServiceType'].isin(selected_services)) &
         (filtered_data['Date'].between(pd.Timestamp(date_range[0]), pd.Timestamp(date_range[1]))) &
         (filtered_data['Hour'].between(hour_range[0], hour_range[1])) &
         (filtered_data['Amount'].between(*amount_range))
     ]
 else:
-    filtered_data = filtered_data[
-        (filtered_data['Carrier'].isin(selected_carriers)) &
-        (filtered_data['CarrierService'].isin(selected_services)) &
+    filtered_data = filtered_data[(
+        filtered_data['Carrier'].isin(selected_carriers)) &
+        (filtered_data['ServiceType'].isin(selected_services)) &
         (filtered_data['Date'].between(pd.Timestamp(date_range[0]), pd.Timestamp(date_range[1]))) &
         (filtered_data['Hour'].between(hour_range[0], hour_range[1])) &
         (filtered_data['Amount'].between(*amount_range))
@@ -82,16 +105,29 @@ else:
 
 # Line Graph Across Time (counting rows instead of summing Amount)
 st.header("Purchases across a period of time")
+
+# Calculate the difference between the dates in days
+date_diff = (pd.to_datetime(date_range[1]) - pd.to_datetime(date_range[0])).days
+
+# Select time interval filter
 interval = st.selectbox(
-    "Select time interval:",
+    "Select time interval - only when the selected range is less than 30 days:",
     ["10T", "15T", "30T", "1H", "2H"],
     index=3  # Default to "1H"
 )
+
+# Adjust the interval based on the date range
+if date_diff > 60:
+    interval = "2D"  # 2-day intervals if more than 60 days selected
+elif 30 <= date_diff <= 60:
+    interval = "1D"  # 1-day intervals if between 30-60 days
+# Otherwise, keep the interval as the user-selected option for less than 30 days
 
 if not filtered_data.empty:
     # Ensure 'CreatedAt' column exists in filtered_data for resampling
     resampled = filtered_data.set_index('CreatedAt').resample(interval).size()
 
+    # Create the line plot
     fig = px.line(resampled, x=resampled.index, y=resampled.values,
                   title=f"Number of Purchases Over Time ({interval})")
     fig.update_layout(
