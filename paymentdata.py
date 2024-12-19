@@ -3,6 +3,7 @@ import plotly.express as px
 import streamlit as st
 
 # Load the dataset
+# data = pd.read_csv(r"./PaymentDataPH.csv", encoding='latin1')  # Adjust for encoding issues
 data = pd.read_csv(r"./PaymentDataPH.zip", compression='zip', encoding='latin1')
 
 # Ensure 'CreatedAt' column is in datetime format
@@ -30,77 +31,81 @@ selected_brand = 'All'
 # Apply brand filter to update other filters
 filtered_data = data if selected_brand == 'All' else data[data['Brand'] == selected_brand]
 
-# Mode, IsCollectionBusiness, and IsRecipientBusiness filters
-modes = ['All'] + list(filtered_data['Mode'].dropna().unique())  # Add 'All' option for modes
-selected_modes = st.sidebar.multiselect("Select Modes", modes, default=modes)
-
-is_collection_business_options = ['All', True, False]
-selected_is_collection_business = st.sidebar.multiselect(
-    "Select IsCollectionBusiness", is_collection_business_options, default=is_collection_business_options)
-
-is_recipient_business_options = ['All', True, False]
-selected_is_recipient_business = st.sidebar.multiselect(
-    "Select IsRecipientBusiness", is_recipient_business_options, default=is_recipient_business_options)
-
-# Apply filters for Mode, IsCollectionBusiness, and IsRecipientBusiness
-if selected_modes != ['All']:
-    filtered_data = filtered_data[filtered_data['Mode'].isin(selected_modes)]
-if selected_is_collection_business != ['All']:
-    filtered_data = filtered_data[filtered_data['IsCollectionBusiness'].isin(selected_is_collection_business)]
-if selected_is_recipient_business != ['All']:
-    filtered_data = filtered_data[filtered_data['IsRecipientBusiness'].isin(selected_is_recipient_business)]
-
-# Set the title dynamically based on selected brand
-st.title(f"Payment Data Q4 - {selected_brand if selected_brand != 'All' else 'All Brands'}")
-
-# Update Date Range Filter based on selected Brand
+# 1. Date Range Filter
 min_date = filtered_data['Date'].min()
 max_date = filtered_data['Date'].max()
 date_range = st.sidebar.date_input("Select Date Range", [min_date, max_date], min_value=min_date, max_value=max_date)
 
-# Update Hour Filter based on selected Brand
+# 2. Hour Range Filter
 hour_range = st.sidebar.slider("Select Hour Range", 0, 23, (0, 23))
 
-# Update Amount Range Filter based on selected Brand
+# 3. Amount Range Filter
 min_amount, max_amount = float(filtered_data['Amount'].min()), float(filtered_data['Amount'].max())
 amount_range = st.sidebar.slider("Select Amount Range", min_amount, max_amount, (min_amount, max_amount))
 
-# Update Carrier Filter dynamically based on selected Brand
+# 4. Mode Filter with "All" option
+modes = list(filtered_data['Mode'].dropna().unique())  # Remove 'All' option for modes
+modes = ['All'] + modes  # Add 'All' option
+selected_modes = st.sidebar.multiselect("Select Modes", modes, default=modes)
+
+# 5. IsCollectionBusiness Filter
+selected_is_collection_business = st.sidebar.multiselect(
+    "Select IsCollectionBusiness", [True, False], default=[True, False])
+
+# 6. IsRecipientBusiness Filter
+selected_is_recipient_business = st.sidebar.multiselect(
+    "Select IsRecipientBusiness", [True, False], default=[True, False])
+
+# 7. Carrier Filter with "All" option
 carriers = ['All'] + list(filtered_data['Carrier'].unique())  # Add 'All' option for carriers
 selected_carriers = st.sidebar.multiselect("Select Carriers", carriers, default=carriers)
 
-# Update Service Filter dynamically based on selected Carriers
+# 8. Service Filter with "All" option
 carrier_services_dict = {
     carrier: filtered_data[filtered_data['Carrier'] == carrier]['ServiceType'].unique()
     for carrier in selected_carriers if carrier != 'All'
 }
+# Combine all services from selected carriers and add 'All' option
 selected_services = []
 if selected_carriers != ['All']:  # Only show services if specific carriers are selected
+    all_services = []
+    for carrier in selected_carriers:
+        if carrier != 'All':
+            all_services.extend(carrier_services_dict.get(carrier, []))
+    all_services = list(set(all_services))  # Remove duplicates
     selected_services = st.sidebar.multiselect(
         "Select Services",
-        options=[service for carrier in selected_carriers if carrier != 'All' for service in carrier_services_dict[carrier]],
-        default=[service for carrier in selected_carriers if carrier != 'All' for service in carrier_services_dict[carrier]]
+        options=all_services,
+        default=all_services
+    )
+else:
+    selected_services = st.sidebar.multiselect(
+        "Select Services",
+        options=filtered_data['ServiceType'].unique(),
+        default=filtered_data['ServiceType'].unique()
     )
 
-# Apply final filter to the data
-if selected_brand == 'All':
-    filtered_data = filtered_data[(
-        filtered_data['ServiceType'].isin(selected_services)) &
-        (filtered_data['Date'].between(pd.Timestamp(date_range[0]), pd.Timestamp(date_range[1]))) &
-        (filtered_data['Hour'].between(hour_range[0], hour_range[1])) &
-        (filtered_data['Amount'].between(*amount_range))
-    ]
-else:
-    filtered_data = filtered_data[(
-        filtered_data['Carrier'].isin(selected_carriers)) &
-        (filtered_data['ServiceType'].isin(selected_services)) &
-        (filtered_data['Date'].between(pd.Timestamp(date_range[0]), pd.Timestamp(date_range[1]))) &
-        (filtered_data['Hour'].between(hour_range[0], hour_range[1])) &
-        (filtered_data['Amount'].between(*amount_range))
-    ]
+# Apply filters for Mode, IsCollectionBusiness, IsRecipientBusiness, etc.
+if 'All' not in selected_modes:
+    filtered_data = filtered_data[filtered_data['Mode'].isin(selected_modes)]
+if 'All' not in selected_carriers:
+    filtered_data = filtered_data[filtered_data['Carrier'].isin(selected_carriers)]
+if 'All' not in selected_services:
+    filtered_data = filtered_data[filtered_data['ServiceType'].isin(selected_services)]
+
+# Apply other filters (IsCollectionBusiness, IsRecipientBusiness, etc.)
+filtered_data = filtered_data[filtered_data['IsCollectionBusiness'].isin(selected_is_collection_business)]
+filtered_data = filtered_data[filtered_data['IsRecipientBusiness'].isin(selected_is_recipient_business)]
+
+# Apply the date range, hour range, and amount range filters
+filtered_data = filtered_data[(
+    filtered_data['Date'].between(pd.Timestamp(date_range[0]), pd.Timestamp(date_range[1]))) &
+    (filtered_data['Hour'].between(hour_range[0], hour_range[1])) &
+    (filtered_data['Amount'].between(*amount_range))
+]
 
 # Display filtered data preview
-# st.write("Filtered Dataset Preview:")
+# st.write("Filtered Dataset Preview:") 
 # st.dataframe(filtered_data.head())
 
 # Line Graph Across Time (counting rows instead of summing Amount)
